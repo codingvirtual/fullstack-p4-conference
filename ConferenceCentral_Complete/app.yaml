@@ -1,7 +1,7 @@
-application: your-project-id
-version: 1
+application: arctic-pagoda-690
+version: 6
 runtime: python27
-api_version: 1
+api_version: 6
 threadsafe: yes
 
 handlers:       # static then dynamic
