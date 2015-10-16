@@ -19,7 +19,7 @@ from google.appengine.ext import ndb
 
 class Session(ndb.Model):
     """Session Object - represents a specific session of a Conference"""
-    conferenceKey   = ndb.StringProperty(repeated=True)
+    conferenceKey   = ndb.StringProperty()
     sessionName     = ndb.StringProperty()
     highlights      = ndb.StringProperty()
     speaker         = ndb.StringProperty()
@@ -37,7 +37,7 @@ class SessionForm(messages.Message):
     typeOfSession   = messages.StringField(5)
     date            = messages.StringField(6)
     startTime       = messages.StringField(7)
-    websafeKey      = messages.StringField(8)
+    conferenceKey   = messages.StringField(8)
 
 class SessionForms(messages.Message):
     """SessionForms -- multiple Session outbound form message"""
