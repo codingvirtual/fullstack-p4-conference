@@ -86,10 +86,10 @@ app.constant('HTTP_ERRORS', {
  */
 app.factory('oauth2Provider', function ($modal) {
     var oauth2Provider = {
-        CLIENT_ID: 'web-client-id',
+        CLIENT_ID: '15582027881-5n1l2vk5rtoonjd2ic2c0v18qp9k7nb0.apps.googleusercontent.com',
         SCOPES: 'email profile',
         signedIn: false
-    }
+    };
 
     /**
      * Calls the OAuth2 authentication method.
@@ -111,7 +111,7 @@ app.factory('oauth2Provider', function ($modal) {
     oauth2Provider.signOut = function () {
         gapi.auth.signOut();
         // Explicitly set the invalid access token in order to make the API calls fail.
-        gapi.auth.setToken({access_token: ''})
+        gapi.auth.setToken({access_token: ''});
         oauth2Provider.signedIn = false;
     };
 
