@@ -17,6 +17,28 @@ import endpoints
 from protorpc import messages
 from google.appengine.ext import ndb
 
+class Session(ndb.Model):
+    """Session Object - represents a specific session of a Conference"""
+    conferenceKey   = ndb.StringProperty(repeated=True)
+    sessionName     = ndb.StringProperty()
+    highlights      = ndb.StringProperty()
+    speaker         = ndb.StringProperty()
+    duration        = ndb.IntegerProperty()
+    typeOfSession   = ndb.StringProperty()
+    date            = ndb.DateProperty()
+    startTime       = ndb.StringProperty()
+
+class SessionForm(messages.Message):
+    """SessionForm -- create a Session"""
+    sessionName     = messages.StringField(1)
+    highlights      = messages.StringField(2)
+    speaker         = messages.StringField(3)
+    duration        = messages.IntegerField(4)
+    typeOfSession   = messages.StringField(5)
+    date            = messages.StringField(6)
+    startTime       = messages.StringField(7)
+
+
 class ConflictException(endpoints.ServiceException):
     """ConflictException -- exception mapped to HTTP 409 response"""
     http_status = httplib.CONFLICT

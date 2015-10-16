@@ -550,5 +550,8 @@ class ConferenceApi(remote.Service):
             items=[self._copyConferenceToForm(conf, "") for conf in q]
         )
 
+    @endpoints.method(CONF_GET_REQUEST, ConferenceForm,
+              path='sessions/{websafeConferenceKey}',
+              http_method='GET', name='getConference')
 
 api = endpoints.api_server([ConferenceApi]) # register API
