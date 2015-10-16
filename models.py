@@ -39,6 +39,10 @@ class SessionForm(messages.Message):
     startTime       = messages.StringField(7)
     websafeKey      = messages.StringField(8)
 
+class SessionForms(messages.Message):
+    """SessionForms -- multiple Session outbound form message"""
+    items = messages.MessageField(SessionForm, 1, repeated=True)
+
 class ConflictException(endpoints.ServiceException):
     """ConflictException -- exception mapped to HTTP 409 response"""
     http_status = httplib.CONFLICT
