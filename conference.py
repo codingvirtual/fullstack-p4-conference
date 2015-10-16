@@ -33,6 +33,9 @@ from models import BooleanMessage
 from models import Conference
 from models import ConferenceForm
 from models import ConferenceForms
+from models import Session
+from models import SessionForm
+from models import SessionForms
 from models import ConferenceQueryForm
 from models import ConferenceQueryForms
 from models import TeeShirtSize
@@ -84,6 +87,15 @@ CONF_POST_REQUEST = endpoints.ResourceContainer(
     websafeConferenceKey=messages.StringField(1),
 )
 
+SESSIONS_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    conferenceKey=messages.StringField(1),
+)
+
+SESSIONS_POST_REQUEST = endpoints.ResourceContainer(
+    SessionForm,
+    conferenceKey=messages.StringField(1),
+)
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 
@@ -92,6 +104,80 @@ CONF_POST_REQUEST = endpoints.ResourceContainer(
     scopes=[EMAIL_SCOPE])
 class ConferenceApi(remote.Service):
     """Conference API v0.1"""
+
+# - - - Session objects - - - - - - - - - - - - - - - - -
+    @endpoints.method(SESSIONS_GET_REQUEST, SessionForm,
+                      path='getConferenceSessions/{conferenceKey}',
+                      http_method='GET', name='getConferenceSessions')
+    def getConferenceSessions(self, request):
+        """Return list of sessions for a particular conference"""
+        conf_key = ndb.Key(Conference, request.conferenceKey)
+        sessions = Session.query(ancestor=conf_key)
+        return SessionForms(
+            items=[self._copySessionsToForm(sess)
+                   for sess in sessions]
+        )
+
+    def _copySessionToForm(self, sess):
+        sf = SessionForm()
+        for field in sf.all_fields():
+            if hasattr(sess, field.name):
+                # convert Date to date string; just copy others
+                # TODO: address time in 24 hour format
+                if field.name.endswith('date'):
+                    setattr(sf, field.name, str(getattr(sess, field.name)))
+                else:
+                    setattr(sf, field.name, getattr(sess, field.name))
+            elif field.name == "conferenceKey":
+                setattr(sf, field.name, sess.key.urlsafe())
+        sf.check_initialized()
+        return sf
+
+    @endpoints.method(SessionForm, SessionForm,
+                      path='createSession',
+                      name='createSession',
+                      http_method='POST')
+    def createSession(self, request):
+        """Create new Session for conference"""
+        return self._createSessionObject(request)
+
+    def _createSessionObject(self, request):
+        user = endpoints.get_current_user()
+        if not user:
+            raise endpoints.UnauthorizedException('Authorization required')
+        user_id = getUserId(user)
+
+        # copy SessionForm/ProtoRPC Message into dict
+        data = {field.name: getattr(request, field.name) for field in request.all_fields()}
+        del data['conferenceKey']
+
+        # add default values for those missing (both data model & outbound Message)
+        # for df in DEFAULTS:
+        #     if data[df] in (None, []):
+        #         data[df] = DEFAULTS[df]
+        #         setattr(request, df, DEFAULTS[df])
+
+        # convert dates from strings to Date objects; set month based on start_date
+        if data['date']:
+            data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
+            # TODO: fix start time below
+            # data['startTime'] = data['startDate'].month
+
+        # generate Conf Key based on user ID and Conference
+        # ID based on Profile key get Conference key from ID
+        conf_key = ndb.Key(Conference, request.conferenceKey)
+        s_id = Session.allocate_ids(size=1, parent=conf_key)[0]
+        s_key = ndb.Key(Session, s_id, parent=conf_key)
+        data['key'] = s_key
+
+        # create Session, send email to organizer confirming
+        # creation of Session & return (modified) SessionForm
+        Session(**data).put()
+        taskqueue.add(params={'email': user.email(),
+                              'sessionInfo': repr(request)},
+                      url='/tasks/send_confirmation_email'
+                      )
+        return request
 
 # - - - Conference objects - - - - - - - - - - - - - - - - -
 
@@ -550,8 +636,6 @@ class ConferenceApi(remote.Service):
             items=[self._copyConferenceToForm(conf, "") for conf in q]
         )
 
-    @endpoints.method(CONF_GET_REQUEST, ConferenceForm,
-              path='sessions/{websafeConferenceKey}',
-              http_method='GET', name='getConference')
+
 
 api = endpoints.api_server([ConferenceApi]) # register API
