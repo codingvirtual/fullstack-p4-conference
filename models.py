@@ -26,7 +26,12 @@ class Session(ndb.Model):
     duration        = ndb.IntegerProperty()
     typeOfSession   = ndb.StringProperty()
     date            = ndb.DateProperty()
+    # For startTime, the assumption is made that any clients will pass
+    # this to the API as a string formatted in military time such as
+    # HH:MM where HH is 2 digits between 00 and 23 and MM is two digits
+    # between 00 and 59.
     startTime       = ndb.StringProperty()
+
 
 class SessionForm(messages.Message):
     """SessionForm -- create a Session"""
@@ -36,6 +41,10 @@ class SessionForm(messages.Message):
     duration        = messages.IntegerField(4)
     typeOfSession   = messages.StringField(5)
     date            = messages.StringField(6)
+    # For startTime, the assumption is made that any clients will pass
+    # this to the API as a string formatted in military time such as
+    # HH:MM where HH is 2 digits between 00 and 23 and MM is two digits
+    # between 00 and 59.
     startTime       = messages.StringField(7)
     conferenceKey   = messages.StringField(8)
 
