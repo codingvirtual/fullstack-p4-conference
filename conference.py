@@ -106,16 +106,17 @@ class ConferenceApi(remote.Service):
     """Conference API v0.1"""
 
 # - - - Session objects - - - - - - - - - - - - - - - - -
-    @endpoints.method(SESSIONS_GET_REQUEST, SessionForm,
+    @endpoints.method(SESSIONS_GET_REQUEST, SessionForms,
                       path='getConferenceSessions/{conferenceKey}',
                       http_method='GET', name='getConferenceSessions')
     def getConferenceSessions(self, request):
         """Return list of sessions for a particular conference"""
-        conf_key = ndb.Key(Conference, request.conferenceKey)
-        sessions = Session.query(ancestor=conf_key)
+        wsck = request.conferenceKey
+        conf_key = ndb.Key(urlsafe=wsck)
+        confSessions = Session.query(ancestor=conf_key)
         return SessionForms(
-            items=[self._copySessionsToForm(sess)
-                   for sess in sessions]
+            items=[self._copySessionToForm(sess)
+                   for sess in confSessions]
         )
 
     def _copySessionToForm(self, sess):
