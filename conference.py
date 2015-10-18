@@ -132,8 +132,8 @@ class ConferenceApi(remote.Service):
         sf.check_initialized()
         return sf
 
-    @endpoints.method(SessionForm, SessionForm,
-                      path='createSession',
+    @endpoints.method(SESSIONS_POST_REQUEST, SessionForm,
+                      path='createSession/{conferenceKey}',
                       name='createSession',
                       http_method='POST')
     def createSession(self, request):
@@ -179,7 +179,7 @@ class ConferenceApi(remote.Service):
                               'sessionInfo': repr(request)},
                       url='/tasks/send_confirmation_email'
                       )
-        return request
+        return self._copySessionToForm(sess)
 
 # - - - Conference objects - - - - - - - - - - - - - - - - -
 
