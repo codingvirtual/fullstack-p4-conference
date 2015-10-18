@@ -123,7 +123,6 @@ class ConferenceApi(remote.Service):
         for field in sf.all_fields():
             if hasattr(sess, field.name):
                 # convert Date to date string; just copy others
-                # TODO: address time in 24 hour format
                 if field.name.endswith('date'):
                     setattr(sf, field.name, str(getattr(sess, field.name)))
                 else:
@@ -142,6 +141,9 @@ class ConferenceApi(remote.Service):
         return self._createSessionObject(request)
 
     def _createSessionObject(self, request):
+        # TODO: Consider adding validation here. At present, there is minimal
+        # checking to ensure all data is provided and that all data is
+        # formatted correctly
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
@@ -160,12 +162,16 @@ class ConferenceApi(remote.Service):
         # convert dates from strings to Date objects; set month based on start_date
         if data['date']:
             data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
-            # TODO: fix start time below
-            # data['startTime'] = data['startDate'].month
 
         # generate Conf Key based on user ID and Conference
         # ID based on Profile key get Conference key from ID
-        conf_key = ndb.Key(Conference, request.conferenceKey)
+        wsck = request.websafeConferenceKey
+        conf = ndb.Key(urlsafe=wsck).get()
+        if not conf:
+            raise endpoints.NotFoundException(
+            'No conference found with key: %s' % wsck)
+
+    conf_key = ndb.Key(Conference, request.conferenceKey)
         s_id = Session.allocate_ids(size=1, parent=conf_key)[0]
         s_key = ndb.Key(Session, s_id, parent=conf_key)
         data['key'] = s_key
