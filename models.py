@@ -19,8 +19,7 @@ from google.appengine.ext import ndb
 
 class Session(ndb.Model):
     """Session Object - represents a specific session of a Conference"""
-    conferenceKey   = ndb.StringProperty()
-    sessionName     = ndb.StringProperty()
+    sessionName     = ndb.StringProperty(required=True)
     highlights      = ndb.StringProperty()
     speaker         = ndb.StringProperty()
     duration        = ndb.IntegerProperty()
@@ -85,17 +84,17 @@ class BooleanMessage(messages.Message):
 
 class Conference(ndb.Model):
     """Conference -- Conference object"""
-    name            = ndb.StringProperty(required=True)
-    description     = ndb.StringProperty()
-    organizerUserId = ndb.StringProperty()
-    topics          = ndb.StringProperty(repeated=True)
-    city            = ndb.StringProperty()
-    startDate       = ndb.DateProperty()
-    month           = ndb.IntegerProperty() # TODO: do we need for indexing like Java?
-    endDate         = ndb.DateProperty()
-    maxAttendees    = ndb.IntegerProperty()
-    seatsAvailable  = ndb.IntegerProperty()
-    sessions        = ndb.StringProperty(repeated=True)
+    name                = ndb.StringProperty(required=True)
+    description         = ndb.StringProperty()
+    organizerUserId     = ndb.StringProperty()
+    topics              = ndb.StringProperty(repeated=True)
+    city                = ndb.StringProperty()
+    startDate           = ndb.DateProperty()
+    month               = ndb.IntegerProperty()
+    endDate             = ndb.DateProperty()
+    maxAttendees        = ndb.IntegerProperty()
+    seatsAvailable      = ndb.IntegerProperty()
+    sessionKeys         = ndb.StringProperty(repeated=True)
 
 class ConferenceForm(messages.Message):
     """ConferenceForm -- Conference outbound form message"""

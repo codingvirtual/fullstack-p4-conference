@@ -58,7 +58,7 @@ DEFAULTS = {
     "city": "Default City",
     "maxAttendees": 0,
     "seatsAvailable": 0,
-    "topics": [ "Default", "Topic" ],
+    "topics": [ "Default", "Topic" ]
 }
 
 OPERATORS = {
@@ -147,38 +147,34 @@ class ConferenceApi(remote.Service):
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
-        user_id = getUserId(user)
 
         # copy SessionForm/ProtoRPC Message into dict
         data = {field.name: getattr(request, field.name) for field in request.all_fields()}
         del data['conferenceKey']
 
-        # add default values for those missing (both data model & outbound Message)
-        # for df in DEFAULTS:
-        #     if data[df] in (None, []):
-        #         data[df] = DEFAULTS[df]
-        #         setattr(request, df, DEFAULTS[df])
-
         # convert dates from strings to Date objects; set month based on start_date
         if data['date']:
             data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
 
-        # generate Conf Key based on user ID and Conference
-        # ID based on Profile key get Conference key from ID
-        wsck = request.websafeConferenceKey
-        conf = ndb.Key(urlsafe=wsck).get()
+        # generate Sess Key based on Conf Key
+        wsck = request.conferenceKey
+        conf_key = ndb.Key(urlsafe=wsck)
+        conf = conf_key.get()
         if not conf:
             raise endpoints.NotFoundException(
             'No conference found with key: %s' % wsck)
 
-    conf_key = ndb.Key(Conference, request.conferenceKey)
+
         s_id = Session.allocate_ids(size=1, parent=conf_key)[0]
         s_key = ndb.Key(Session, s_id, parent=conf_key)
         data['key'] = s_key
 
+
+
         # create Session, send email to organizer confirming
         # creation of Session & return (modified) SessionForm
-        Session(**data).put()
+        sess = Session(**data)
+        sess.put()
         taskqueue.add(params={'email': user.email(),
                               'sessionInfo': repr(request)},
                       url='/tasks/send_confirmation_email'
