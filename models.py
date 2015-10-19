@@ -30,6 +30,7 @@ class Session(ndb.Model):
     # HH:MM where HH is 2 digits between 00 and 23 and MM is two digits
     # between 00 and 59.
     startTime       = ndb.StringProperty()
+    speakerKey      = ndb.StringProperty()
 
 
 class SessionForm(messages.Message):
@@ -46,10 +47,36 @@ class SessionForm(messages.Message):
     # between 00 and 59.
     startTime       = messages.StringField(7)
     conferenceKey   = messages.StringField(8)
+    speakerKey      = messages.StringField(9)
 
 class SessionForms(messages.Message):
     """SessionForms -- multiple Session outbound form message"""
     items = messages.MessageField(SessionForm, 1, repeated=True)
+
+class SessionQueryForm(messages.Message):
+    field = messages.StringField(1)
+    operator = messages.StringField(2)
+    value = messages.StringField(3)
+
+class SessionQueryForms(messages.Message):
+    filters = messages.MessageField(SessionQueryForm, 1, repeated=True)
+
+class SpeakerForm(messages.Message):
+    """SpeakerForm -- Speaker outbound form message"""
+    displayName = messages.StringField(1)
+    profileKey = messages.StringField(2)
+    biography = messages.StringField(3)
+    websafeKey = messages.StringField(4)
+
+class Speaker(ndb.Model):
+    """Speaker -- Speaker object"""
+    displayName = ndb.StringProperty(required=True)
+    profileKey = ndb.StringProperty()
+    biography = ndb.StringProperty()
+
+class SpeakerForms(messages.Message):
+    """SpeakerForm -- multiple Speaker outbound form message"""
+    items = messages.MessageField(SpeakerForm, 1, repeated=True)
 
 class ConflictException(endpoints.ServiceException):
     """ConflictException -- exception mapped to HTTP 409 response"""
@@ -61,6 +88,7 @@ class Profile(ndb.Model):
     mainEmail = ndb.StringProperty()
     teeShirtSize = ndb.StringProperty(default='NOT_SPECIFIED')
     conferenceKeysToAttend = ndb.StringProperty(repeated=True)
+    sessionKeysWishList = ndb.StringProperty(repeated=True)
 
 class ProfileMiniForm(messages.Message):
     """ProfileMiniForm -- update Profile form message"""
