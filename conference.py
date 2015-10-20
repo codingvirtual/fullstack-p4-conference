@@ -25,26 +25,7 @@ from google.appengine.api import taskqueue
 from google.appengine.ext import ndb
 
 from constants import *
-
-from models import ConflictException
-from models import Profile
-from models import ProfileMiniForm
-from models import ProfileForm
-from models import StringMessage
-from models import BooleanMessage
-from models import Conference
-from models import ConferenceForm
-from models import ConferenceForms
-from models import Session
-from models import SessionForm
-from models import SessionForms
-from models import SessionQueryForms
-from models import Speaker
-from models import SpeakerForm
-from models import SpeakerForms
-from models import ConferenceQueryForm
-from models import ConferenceQueryForms
-from models import TeeShirtSize
+from models import *
 
 from settings import WEB_CLIENT_ID
 from settings import ANDROID_CLIENT_ID
