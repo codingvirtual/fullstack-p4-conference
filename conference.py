@@ -62,9 +62,6 @@ class ConferenceApi(remote.Service):
         return self._createSessionObject(request)
 
     def _createSessionObject(self, request):
-        # TODO: Consider adding validation here. At present, there is minimal
-        # checking to ensure all data is provided and that all data is
-        # formatted correctly
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
@@ -173,11 +170,13 @@ class ConferenceApi(remote.Service):
             items=[self._copySessionToForm(sess) for sess in sessions]
         )
 
-    @endpoints.method(message_types.VoidMessage, StringMessage,
-                      http_method='GET', name='getFeaturedSpeaker')
-    def getFeaturedSpeaker(self, request):
-        """Returns the sessions of the featured speaker"""
-        return StringMessage(data=memcache.get(MEMCACHE_SPEAKER_KEY) or "")
+
+    @endpoints.method(SESSIONS_GET_REQUEST, BooleanMessage,
+                      path='wishlist',
+                      http_method='POST', name='addSessionToWishlist')
+    def addSessionToWishlist(self, request):
+        """adds the session to the user's list of sessions they are interested in attending"""
+        return self._addSessionToWishlist(request)
 
     def _addSessionToWishlist(self, request):
         result = None
@@ -192,7 +191,6 @@ class ConferenceApi(remote.Service):
                 "You have already added for this session")
         prof.sessionKeysWishList.append(request.websafeSessionKey)
         result = True
-
         prof.put()
         conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
         p_key = ndb.Key(Conference, conf.key.id())
@@ -203,6 +201,13 @@ class ConferenceApi(remote.Service):
             cache_data['speaker'] = self.getFeaturedSpeaker()
             cache_data['sessionNames'] = [session.name for session in sessions]
         return BooleanMessage(data=result)
+
+    @endpoints.method(SESSIONS_GET_REQUEST, BooleanMessage,
+                      path='wishlist',
+                      http_method='DELETE', name='removeSessionFromWishlist')
+    def removeSessionFromWishlist(self, request):
+        """remove user for selected session"""
+        return self._removeSessionFromWishlist(request)
 
     def _removeSessionFromWishlist(self, request):
         result = None
@@ -228,43 +233,6 @@ class ConferenceApi(remote.Service):
             cache_data['sessionNames'] = [session.name for session in sessions]
         return BooleanMessage(data=result)
 
-    def _sessionQueryFactory(self, request):
-        """Return formatted session query from the submitted filters."""
-        q = Session.query()
-        inequality_filter, filters = self._formatFilters(request.filters)
-
-        # If exists, sort on inequality filter first
-        if not inequality_filter:
-            q = q.order(Session.name)
-        else:
-            q = q.order(ndb.GenericProperty(inequality_filter))
-            q = q.order(Session.name)
-
-        for filtr in filters:
-            if filtr["field"] in ["duration", "startTime"]:
-                filtr["value"] = int(filtr["value"])
-            formatted_query = ndb.query.FilterNode(filtr["field"], filtr["operator"], filtr["value"])
-            q = q.filter(formatted_query)
-        return q
-
-    @endpoints.method(QUERY_POST_REQUEST, SessionForms,
-                      path='queryProblem/{startTime}/{typeOfSession}',
-                      http_method='POST',
-                      name='queryProblem')
-    def queryProblem(self, request):
-        startTime = datetime.strptime(request.startTime, "%H%M").time()
-        sessionsByStartTime = Session.query(Session.startTime < startTime)
-        sessionsByType = Session.query(Session.typeOfSession == request.typeOfSession)
-        # final output is stored in solutionQueries array
-        solutionQueries = []
-
-        for session in sessionsByStartTime:
-            if session not in sessionsByType:
-                solutionQueries.append(session)
-
-        return SessionForms(
-            items=[self._copySessionToForm(sess) for sess in solutionQueries]
-        )
 
     @endpoints.method(message_types.VoidMessage, SessionForms,
                       http_method='POST', name='getSessionsInWishlist')
@@ -284,19 +252,54 @@ class ConferenceApi(remote.Service):
             items=[self._copySessionToForm(ndb.Key(urlsafe=session).get()) for session in sessions]
         )
 
-    @endpoints.method(SESSION_GET_REQUEST, BooleanMessage,
-                      path='wishlist',
-                      http_method='POST', name='addSessionToWishlist')
-    def addSessionToWishlist(self, request):
-        """adds the session to the user's list of sessions they are interested in attending"""
-        return self._addSessionToWishlist(request)
 
-    @endpoints.method(SESSION_GET_REQUEST, BooleanMessage,
-                      path='wishlist',
-                      http_method='DELETE', name='removeSessionFromWishlist')
-    def removeSessionFromWishlist(self, request):
-        """remove user for selected session"""
-        return self._removeSessionFromWishlist(request)
+    def _sessionQueryFactory(self, request):
+        """Return formatted session query from the submitted filters."""
+        q = Session.query()
+        inequality_filter, filters = self._formatFilters(request.filters)
+
+        # If exists, sort on inequality filter first
+        if not inequality_filter:
+            q = q.order(Session.name)
+        else:
+            q = q.order(ndb.GenericProperty(inequality_filter))
+            q = q.order(Session.name)
+
+        for filtr in filters:
+            if filtr["field"] in ["duration", "startTime"]:
+                filtr["value"] = int(filtr["value"])
+            formatted_query = ndb.query.FilterNode(filtr["field"], filtr["operator"], filtr["value"])
+            q = q.filter(formatted_query)
+        return q
+
+    """ The following method solves or contributes to solving:
+            Requirement 5.2: Come up with 2 additional queries
+            Requirement 5.3: Solve specific query problem (workshops < 7 PM)
+
+    """
+    @endpoints.method(QUERY_POST_REQUEST, SessionForms,
+                      path='sessionsByTimeAndType/{startTime}/{typeOfSession}',
+                      http_method='POST',
+                      name='sessionsByTimeAndType')
+    def sessionsByTimeAndType(self, request):
+        startTime = datetime.strptime(request.startTime, "%H%M").time()
+        """ startTime is stored as a string and is in 24-hour HH:MM format
+            so a less-than search will yield the correct results.
+            For this to work, a composite index is required that will
+            index on startTime and typeOfSession
+        """
+        sessionsByStartTime = Session.query(Session.startTime < startTime)
+        sessionsByType = Session.query(Session.typeOfSession == request.typeOfSession)
+        # final output is stored in matchingSessions array
+        matchingSessions = []
+
+        for session in sessionsByStartTime:
+            if session not in sessionsByType:
+                matchingSessions.append(session)
+
+        return SessionForms(
+            items=[self._copySessionToForm(sess) for sess in matchingSessions]
+        )
 
     # - - - Speaker objects - - - - - - - - - - - - - - - - -
 
@@ -334,6 +337,21 @@ class ConferenceApi(remote.Service):
                 setattr(sf, field.name, speaker.key.urlsafe())
         sf.check_initialized()
         return sf
+
+    @endpoints.method(message_types.VoidMessage, StringMessage,
+                      http_method='GET', name='getFeaturedSpeaker')
+    def getFeaturedSpeaker(self, request):
+        """Returns the sessions of the featured speaker"""
+        return StringMessage(data=memcache.get(MEMCACHE_SPEAKER_KEY) or "")
+
+    @endpoints.method(message_types.VoidMessage, SpeakerForms,
+                      path='speakers',
+                      http_method='GET', name='getAllSpeakers')
+    def getAllSpeakers(self, request):
+        """2nd Query to satisfy Requirement 5.2: Come up with 2
+            additional queries"""
+        speakers = Speaker.query()
+        return SpeakerForms(items=[self._copySpeakerToForm(speaker) for speaker in speakers])
 
 # - - - Conference objects - - - - - - - - - - - - - - - - -
     def _copyConferenceToForm(self, conf, displayName):
