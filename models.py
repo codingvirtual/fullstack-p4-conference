@@ -10,6 +10,41 @@ created/forked from conferences.py by wesc on 2014 may 24
 
 """
 
+""" This file defines a number of data models that are essential in the overall
+    "Object Relational Model" between Python (and JSON) objects and their
+    counterparts as stored in Datastore. All inherit from Google's "ndb" class
+    which provides the necessary functionality for Datastore operations such
+    as puts, gets, etc.
+
+    Each item stored in Datastore is represented as a "Kind" by Datastore.
+    The Conference App has a number of key Kinds in its domain which include:
+        Conference - the core Kind. It represents an instance of a conference
+        Session - a "child" of a conference. It represents a particular
+            "break-out" session during a conference. In theory, a conference
+            should consist of 1 or more sessions. Together, all the sessions
+            of a given conference make up the content of that conference.
+        Speaker - each Session can have an associated Speaker.
+        Profile - defines a User of the system. Only users can create
+            conferences and sessions, though anyone can view them.
+
+    Heirarchy:
+        Profiles (users) are the top-level objects
+        Conferences have a parent Profile (user). Profile is thus an ancestor
+            to Conference.
+        Sessions have a parent Conference. Conferences are thus ancestors to
+            Sessions.
+        Speakers are free-standing and do not have an ancestral heirarchy,
+            though they are associated with specific sessions.
+
+    In addition to a class defining the Kinds described above, there are
+    related classes that define a form for that Kind. Forms are used as
+    the mechanism for sending a Kind across the Internet and represent
+    data as "form-encoded."
+
+    You will also see a "plural" version ("Forms") for several Kinds. This
+    is to allow more than one of that particular Kind to be transmitted in
+    a single exchange. """
+
 __author__ = 'wesc+api@google.com (Wesley Chun)'
 
 import httplib
