@@ -4,10 +4,10 @@ from protorpc import messages
 from protorpc import message_types
 from models import *
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+""" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - """
 
 """ Default values for a new conference. Used only if the user creating
-    the conferene doesn't supply values for a given field and only fields
+    the conference doesn't supply values for a given field and only fields
     left empty pick up the default (in other words, if the user supplies
     a value for one of the fields below, but not the others, the one they
     supplied a value for will retain that value and only the others that
