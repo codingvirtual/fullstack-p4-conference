@@ -2,6 +2,7 @@ indexes:
 - kind: Session
   properties:
     - name: typeOfSession
+    - direction: asc
     - name: startTime
     - direction: asc
 
