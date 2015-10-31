@@ -29,6 +29,8 @@ __author__ = 'wesc+api@google.com (Wesley Chun)'
 
 from datetime import datetime
 
+from collections import Counter
+
 import endpoints
 from protorpc import messages
 from protorpc import message_types
@@ -68,7 +70,7 @@ ANNOUNCEMENT_TPL = ('Last chance to attend! The following conferences '
 
 class ConferenceApi(remote.Service):
     """Conference API v0.1"""
-""" - - - Session objects - - - - - - - - - - - - - - - - -"""
+# - - - Session objects - - - - - - - - - - - - - - - - -"""
 
     @endpoints.method(SESSIONS_POST_REQUEST, SessionForm,
                       path='createSession/{conferenceKey}',
@@ -100,6 +102,10 @@ class ConferenceApi(remote.Service):
             data['date'] = datetime.strptime(data['date'][:10],
                                              "%Y-%m-%d").date()
 
+        if data['startTime']:
+            data['startTime'] = datetime.strptime(
+                data['startTime'], "%H:%M:%S").time()
+
         """ generate Session Key based on Conf Key """
         wsck = request.conferenceKey
         conf_key = ndb.Key(urlsafe=wsck)
@@ -123,14 +129,11 @@ class ConferenceApi(remote.Service):
             creation of Session & return (modified) SessionForm """
         sess = Session(**data)
         sess.put()
-        """ add a task to the background queue that will send a confirmation
-            email with the name of the speaker that was just configured
+        """ add a task to the background queue that will determine the
+            featured speaker (if there is one) for this conference
             The endpoint for this is at /tasks/set_featured_speaker """
         taskqueue.add(params=
-                      {'speaker': data['speakerKey'],
-                       'speaker name': data['speaker']},
-                      url='/tasks/set_featured_speaker'
-                      )
+                      {'c_key': wsck}, url='/tasks/set_featured_speaker')
         return self._copySessionToForm(s_key.get())
 
     @endpoints.method(SESSIONS_GET_REQUEST, SessionForms,
@@ -185,14 +188,16 @@ class ConferenceApi(remote.Service):
     def _copySessionToForm (self, sess):
         sf = SessionForm()
         for field in sf.all_fields():
-            if hasattr(sess, field.sessionName):
+            if hasattr(sess, field.name):
                 """ convert Date to date string; just copy others """
                 if field.name.endswith('date'):
                     setattr(sf, field.name, str(getattr(sess, field.name)))
+                elif field.name == 'conferenceKey':
+                    setattr(sf, field.name, sess.key.urlsafe())
+                elif field.name == 'startTime':
+                    setattr(sf, field.name, str(getattr(sess, field.name)))
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
-            elif field.name == "conferenceKey":
-                setattr(sf, field.name, sess.key.urlsafe())
         sf.check_initialized()
         return sf
 
@@ -234,7 +239,7 @@ class ConferenceApi(remote.Service):
         prof = self._getProfileFromUser()
 
         """ get the key for the session that will be added to the wishlist """
-        wssk = request.websafeSessionKey
+        wssk = request.sessionKey
 
         """ retrieve the session from Datastore """
         sess = ndb.Key(urlsafe=wssk).get()
@@ -251,23 +256,12 @@ class ConferenceApi(remote.Service):
 
         """ If we get here, all is good, so add the session to the user's
             wish list, which is part of their profile """
-        prof.sessionKeysWishList.append(request.websafeSessionKey)
+        prof.sessionKeysWishList.append(request.sessionKey)
         result = True
 
         """ Save the profile back to Datastore """
         prof.put()
 
-        """ Now check to see if this speaker is the featured speaker.
-            If so, reset the featured speaker cache and reload it with
-            the now-updated list of sessions this speaker is hosting """
-        conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
-        p_key = ndb.Key(Conference, conf.key.id())
-        sessions = Session.query(Session.speaker == self.getFeaturedSpeaker(),
-                                 ancestor=p_key)
-        if len(list(sessions)) > 1:
-            cache_data = {}
-            cache_data['speaker'] = self.getFeaturedSpeaker()
-            cache_data['sessionNames'] = [session.name for session in sessions]
         return BooleanMessage(data=result)
 
     @endpoints.method(SESSIONS_GET_REQUEST, BooleanMessage,
@@ -308,13 +302,15 @@ class ConferenceApi(remote.Service):
         """ Check the Featured Speaker and if the speaker for this session
             is also the featured speaker, reload the cache data for the
             featured speaker so the removed session is no longer present """
-        conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
+        conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
+        conf = Conference.query(conf_key).get()
         p_key = ndb.Key(Conference, conf.key.id())
-        sessions = Session.query(Session.speaker == self.getFeaturedSpeaker(),
+        sessions = Session.query(Session.speakerKey ==
+                                 self.getFeaturedSpeaker(conf_key),
                                  ancestor=p_key)
         if len(list(sessions)) > 1:
             cache_data = {}
-            cache_data['speaker'] = self.getFeaturedSpeaker()
+            cache_data['speakerKey'] = self.getFeaturedSpeaker(conf_key)
             cache_data['sessionNames'] = [session.name for session in sessions]
         return BooleanMessage(data=result)
 
@@ -362,41 +358,99 @@ class ConferenceApi(remote.Service):
         return q
 
     """
-        The following method solves or contributes to solving:
-            Requirement 5.2: Come up with 2 additional queries
-            Requirement 5.3: Solve specific query problem (workshops < 7 PM)
+        The following method satisfies:
+            Requirement 4.2: Come up with 2 additional queries
 
         This method searches for sessions based on a combination of both
         the session time and the session type. Both the time and the type
-        are encoded into the URL query string
+        are contained in the body of the POST request.
+
+        The endpoint will return all sessions that match the type of the
+        request AND occur BEFORE the time specified in the request.
     """
     @endpoints.method(QUERY_POST_REQUEST, SessionForms,
-                      path='sessionsByTimeAndType/{startTime}/{typeOfSession}',
+                      path='sessionsByTimeAndType',
                       http_method='POST',
                       name='sessionsByTimeAndType')
     def sessionsByTimeAndType (self, request):
-        startTime = datetime.strptime(request.startTime, "%H%M").time()
-        """ startTime is stored as a string and is in 24-hour HH:MM format
+        """ startTime is stored as a string and is in 24-hour HH:MM:SS format
             so a less-than search will yield the correct results.
-            For this to work, a composite index is required that will
-            index on startTime and typeOfSession
+            For this to work, a query with a subsequent filter is needed.
+            First, all sessions (regardless of which conference they are part
+            of) will be queried to find the subset of sessions that match the
+            type defined by the request. From there, that query will be
+            filtered to contain only those sessions that start strictly
+            before the time specified in the request (meaning NOT "at or
+            before," but purely before. So if the request startTime is 19:00:00
+            then a session starting at exactly that time will NOT be returned.
         """
-        sessionsByStartTime = Session.query(Session.startTime < startTime)
-        sessionsByType = Session.query(
-            Session.typeOfSession == request.typeOfSession)
 
-        """ final output is stored in matchingSessions array """
-        matchingSessions = []
-
-        for session in sessionsByStartTime:
-            if session not in sessionsByType:
-                matchingSessions.append(session)
-
-        return SessionForms(
-            items=[self._copySessionToForm(sess) for sess in matchingSessions]
+        """ First build a query for all sessions that match the session type in
+            the request and sort it by typeOfSession """
+        matchingSessions = Session.query(
+            Session.typeOfSession == request.typeOfSession).filter(
+            Session.startTime < datetime.strptime(
+                request.startTime, "%H:%M:%S").time()
         )
 
-""" - - - Speaker objects - - - - - - - - - - - - - - - - - """
+        """ Now copy the matching sessions into the SessionForms and return
+            them """
+        return SessionForms(
+            items=[self._copySessionToForm(sess)
+                   for sess in matchingSessions]
+        )
+
+    """
+        The following method satisfies:
+            Requirement 4.2: Come up with 2 additional queries
+            Requirement 4.4: Student proposes one or more solutions to the
+                problematic query
+
+        This method searches for sessions based on a combination of both
+        the session time and the session type. Both the time and the type
+        are contained in the body of the POST request.
+
+        The endpoint will return all sessions that DO NOT match the session
+        type specified in the request and that occur BEFORE the start time
+        specified in the request.
+    """
+    @endpoints.method(QUERY_POST_REQUEST, SessionForms,
+                      path='queryProblem',
+                      http_method='POST',
+                      name='queryProblem')
+    def queryProblem (self, request):
+        """ First, start by getting all of the sessions that do NOT match
+            the type specified in the query. Then, iterate over the results
+            and build a new list that contains only those sessions that start
+            before the specified time.
+        """
+
+        """ First build a query for all sessions that do not match the session
+            type in the request """
+        sessionsByType = Session.query(
+            Session.typeOfSession != request.typeOfSession)
+
+        """ Using the sessions that were retrieved by the query above, set up
+            a new list to contain only those sessions that start before the
+            specified startTime and then iterate over the query results,
+            appending only those sessions that start before the time specified
+            in the request """
+        matchingSessions = []
+        for sess in sessionsByType:
+            """ make sure that there is a valid startTime and that the
+                starTime is less than the specified time """
+            if sess.startTime and (sess.startTime < datetime.strptime(
+                    request.startTime, "%H:%M:%S").time()):
+                matchingSessions.append(sess)
+
+        """ Now copy the matching sessions into the SessionForms and return
+            them """
+        return SessionForms(
+            items=[self._copySessionToForm(sess)
+                   for sess in matchingSessions]
+        )
+
+# - - - Speaker objects - - - - - - - - - - - - - - - - - """
 
     @endpoints.method(SpeakerForm, SpeakerForm, path='speaker',
                       http_method='POST', name='addSpeaker')
@@ -407,9 +461,9 @@ class ConferenceApi(remote.Service):
     def _createSpeakerObject (self, request):
         """ internal method to create a speaker object. There must be a
             logged-in user for this to work. """
-        user = endpoints.get_current_user()
-        if not user:
-            raise endpoints.UnauthorizedException('Authorization required')
+        # user = endpoints.get_current_user()
+        # if not user:
+        #     raise endpoints.UnauthorizedException('Authorization required')
 
         """ If we got here, the user is authorized. Now confirm that they
             have a Display Name set in their profile """
@@ -451,11 +505,13 @@ class ConferenceApi(remote.Service):
         sf.check_initialized()
         return sf
 
-    @endpoints.method(message_types.VoidMessage, StringMessage,
+    @endpoints.method(GET_FEATURED_SPEAKER_REQUEST, StringMessage,
+                      path="'session/{conf_key}",
                       http_method='GET', name='getFeaturedSpeaker')
     def getFeaturedSpeaker (self, request):
         """Returns the sessions of the featured speaker"""
-        return StringMessage(data=memcache.get(MEMCACHE_SPEAKER_KEY) or "")
+        return StringMessage(data=memcache.get(
+            MEMCACHE_SPEAKER_KEY + request.conf_key) or "")
 
     @endpoints.method(message_types.VoidMessage, SpeakerForms,
                       path='speakers',
@@ -468,7 +524,7 @@ class ConferenceApi(remote.Service):
         return SpeakerForms(items=[self._copySpeakerToForm(speaker)
                                    for speaker in speakers])
 
-""" - - - Conference objects - - - - - - - - - - - - - - - - - """
+# - - - Conference objects - - - - - - - - - - - - - - - - - """
     def _copyConferenceToForm (self, conf, displayName):
         """Copy relevant fields from Conference to ConferenceForm."""
         cf = ConferenceForm()
@@ -732,7 +788,7 @@ class ConferenceApi(remote.Service):
                    for conf in conferences]
         )
 
-""" - - - Profile objects - - - - - - - - - - - - - - - - - - - """
+# - - - Profile objects - - - - - - - - - - - - - - - - - - - """
 
     def _copyProfileToForm (self, prof):
         """Copy relevant fields from Profile to ProfileForm."""
@@ -811,7 +867,7 @@ class ConferenceApi(remote.Service):
         """ Update & return user profile. """
         return self._doProfile(request)
 
-""" - - - Announcements - - - - - - - - - - - - - - - - - - - - """
+# - - - Announcements - - - - - - - - - - - - - - - - - - - - """
 
     @staticmethod
     def _cacheAnnouncement ():
@@ -837,15 +893,47 @@ class ConferenceApi(remote.Service):
 
         return announcement
 
-    @endpoints.method(message_types.VoidMessage, StringMessage,
-                      path='conference/announcement/get',
-                      http_method='GET', name='getAnnouncement')
-    def getAnnouncement (self, request):
-        """ Return Announcement from memcache. """
-        return StringMessage(data=memcache.get(
-            MEMCACHE_ANNOUNCEMENTS_KEY) or "")
+    @staticmethod
+    def _setFeaturedSpeaker(self, request):
+        c_key = ndb.Key(urlsafe=request.get('c_key'))
+        qo = ndb.QueryOptions(projection=['speakerKey'])
+        q = Session.query(ancestor=c_key)
+        results = q.fetch(options=qo)
+        speakerSummary = []
+        for row in results:
+            speakerSummary.append(row.speakerKey)
+        summary = Counter(speakerSummary)
 
-""" - - - Registration - - - - - - - - - - - - - - - - - - - - """
+        def get_count(tuple):
+            return tuple[1]
+
+        sortedSummary = sorted(summary.items(), key = get_count, reverse=True)
+        if sortedSummary[0][0] is not None:
+            featuredSpeakerKey = sortedSummary[0][0]
+        elif len(sortedSummary) > 1:
+            featuredSpeakerKey = sortedSummary[1][0]
+        else:
+            featuredSpeakerKey = None
+
+        if featuredSpeakerKey:
+            memcache.set(MEMCACHE_SPEAKER_KEY + c_key.urlsafe(),
+                         featuredSpeakerKey)
+
+        else:
+            """ No featured speakers in the system, so clear the MemCache """
+            memcache.delete(MEMCACHE_SPEAKER_KEY + c_key)
+        return
+
+    @endpoints.method(
+        message_types.VoidMessage, StringMessage,
+        path='conference/announcement/get',http_method='GET',
+        name='getAnnouncement')
+    def getAnnouncement (self, request):
+            """ Return Announcement from memcache. """
+            return StringMessage(data=memcache.get(
+                MEMCACHE_ANNOUNCEMENTS_KEY) or "")
+
+    # - - - Registration - - - - - - - - - - - - - - - - - - - -
 
     @ndb.transactional(xg=True)
     def _conferenceRegistration (self, request, reg=True):
@@ -958,6 +1046,5 @@ class ConferenceApi(remote.Service):
         return ConferenceForms(
             items=[self._copyConferenceToForm(conf, "") for conf in q]
         )
-
 
 api = endpoints.api_server([ConferenceApi])  # register API

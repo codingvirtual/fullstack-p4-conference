@@ -234,7 +234,7 @@ clients.
     - sessionsByTimeAndType(startTime,typeOfSession)
         - Returns all Sessions that begin before the time specified
             by startTime (represented in 24 hour format as HH:MM) and
-            constrained to specific type of Session as specified by the
+            constrained to MATCH the type of Session as specified by the
             typeOfSession parameter.
 
     4.2 The 2nd part of the requirement posed a specific query-related problem
@@ -247,26 +247,27 @@ clients.
       - What is the problem for implementing this query?
       - What ways to solve it did you think of?
 
-      The key to solving this is creating a composite index that addresses the
-      sorting and searching problems. By default, Google Datastore only creates
-      default indexes for each individual field. To do a query involving
-      multiple fields such as this, an index must be created that indexes the
-      two fields involved. Additionally, to perform comparison operations like
-      less-than and greater-than, the appropriate field must also be sorted
-      in ascending order.
+      The main problem in implementing this query is that Datastore will not
+      allow you to do a query with two different inequality operators in the
+      query. For this problem, the query would require that typeOfSession
+      does NOT equal 'workshop' and startTime is less than 19:00:00. Datastore
+      will not allow that sort of query.
 
-      For this problem, the means specifically that the startTime field must
-      be indexed and sorted ascending and that the typeOfSession field must
-      also be indexed and sorted. You will find the created index inside the
-      index.yaml file and reproduced here for your convenience:
+      To solve this, you could either query for all sessions that do NOT match
+      the session type and then iterate over the results in Python and test
+      the session startTime against the request startTime OR the exact
+      opposite.
 
+      I chose to implement it the "first" way described above as I believe
+      that filtering by session type may produce FEWER results than starting
+      out with all the sessions before a given time and then iterating from
+      there.
 
-      - kind: Session
-        properties:
-          - name: typeOfSession
-          - direction: asc
-          - name: startTime
-          - direction: asc
+      In the code, you'll see extensive commenting explaining the process,
+      but at a high level the query results are iterated over and a new
+      list is built to contain only those sessions from the query that start
+      before the indicated time. That new list is what gets returned to the
+      user.
 
 5.  Requirement #5 specifies that a Featured Speaker capability is to be added
     to the system. Specifically, some sort of logic is to be created to

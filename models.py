@@ -64,7 +64,7 @@ class Session(ndb.Model):
     # this to the API as a string formatted in military time such as
     # HH:MM where HH is 2 digits between 00 and 23 and MM is two digits
     # between 00 and 59.
-    startTime       = ndb.StringProperty()
+    startTime       = ndb.TimeProperty()
     speakerKey      = ndb.StringProperty()
 
 

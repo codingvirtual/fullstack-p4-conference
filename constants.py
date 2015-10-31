@@ -86,6 +86,7 @@ QUERY_POST_REQUEST = endpoints.ResourceContainer(
     startTime=messages.StringField(1),
     typeOfSession=messages.StringField(2),
 )
+
 SESSION_BY_CONF_POST_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
     conferenceKey=messages.StringField(1),
@@ -100,4 +101,9 @@ SESSION_BY_TYPE_POST_REQUEST = endpoints.ResourceContainer(
 SESSION_BY_SPEAKER_POST_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
     speaker=messages.StringField(1),
+)
+
+GET_FEATURED_SPEAKER_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    conf_key=messages.StringField(1, required=True),
 )
