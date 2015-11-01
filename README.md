@@ -102,7 +102,12 @@ interested in and retrieve their own current wishlist.
     5.1 Student implements getFeaturedSpeaker()
 
     5.2 Student uses App Engine's Task Queue when implementing the featured
-    speaker logic.
+    speaker logic:
+
+    - When a new session is added to a conference, check the speaker. If
+    there is more than one session by this speaker at this conference,
+    also add a new Memcache entry that features the speaker and session
+    names. You can choose the Memcache key."
 
 6.  Code Quality
 

@@ -72,7 +72,6 @@ class SessionForm(messages.Message):
     """SessionForm -- create a Session"""
     sessionName     = messages.StringField(1)
     highlights      = messages.StringField(2)
-    speaker         = messages.StringField(3)
     duration        = messages.IntegerField(4)
     typeOfSession   = messages.StringField(5)
     date            = messages.StringField(6)
@@ -157,7 +156,6 @@ class Conference(ndb.Model):
     endDate             = ndb.DateProperty()
     maxAttendees        = ndb.IntegerProperty()
     seatsAvailable      = ndb.IntegerProperty()
-    sessionKeys         = ndb.StringProperty(repeated=True)
 
 class ConferenceForm(messages.Message):
     """ConferenceForm -- Conference outbound form message"""
