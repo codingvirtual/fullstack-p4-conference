@@ -117,6 +117,12 @@ indexes:
 - kind: Session
   ancestor: yes
   properties:
+  - name: sessionName
+  - name: speakerKey
+
+- kind: Session
+  ancestor: yes
+  properties:
   - name: speakerKey
 
 - kind: Session

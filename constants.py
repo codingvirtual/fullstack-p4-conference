@@ -71,7 +71,7 @@ SESSIONS_POST_REQUEST = endpoints.ResourceContainer(
     conferenceKey=messages.StringField(1),
 )
 
-WISHLIST_POST_REQUEST = endpoints.ResourceContainer(
+WISHLIST_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
     sessionKey=messages.StringField(1, required=True),
 )
@@ -105,5 +105,5 @@ SESSION_BY_SPEAKER_POST_REQUEST = endpoints.ResourceContainer(
 
 GET_FEATURED_SPEAKER_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
-    conf_key=messages.StringField(1, required=True),
+    conf_key=messages.StringField(1, required=True)
 )

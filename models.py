@@ -105,7 +105,6 @@ class SpeakerForm(messages.Message):
 class Speaker(ndb.Model):
     """Speaker -- Speaker object"""
     displayName = ndb.StringProperty(required=True)
-    profileKey = ndb.StringProperty()
     biography = ndb.StringProperty()
 
 class SpeakerForms(messages.Message):
