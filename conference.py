@@ -104,7 +104,7 @@ class ConferenceApi(remote.Service):
 
         if data['startTime']:
             data['startTime'] = datetime.strptime(
-                data['startTime'], "%H:%M:%S").time()
+                data['startTime'], "%H:%M").time()
 
         # generate Session Key based on Conf Key
         wsck = request.conferenceKey
@@ -389,7 +389,7 @@ class ConferenceApi(remote.Service):
         matchingSessions = Session.query(
             Session.typeOfSession == request.typeOfSession).filter(
             Session.startTime < datetime.strptime(
-                request.startTime, "%H:%M:%S").time()
+                request.startTime, "%H:%M").time()
         )
 
         """ Now copy the matching sessions into the SessionForms and return
@@ -439,7 +439,7 @@ class ConferenceApi(remote.Service):
             """ make sure that there is a valid startTime and that the
                 starTime is less than the specified time """
             if sess.startTime and (sess.startTime < datetime.strptime(
-                    request.startTime, "%H:%M:%S").time()):
+                    request.startTime, "%H:%M").time()):
                 matchingSessions.append(sess)
 
         """ Now copy the matching sessions into the SessionForms and return
