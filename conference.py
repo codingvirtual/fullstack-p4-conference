@@ -449,7 +449,7 @@ class ConferenceApi(remote.Service):
                    for sess in matchingSessions]
         )
 
-# - - - Speaker objects - - - - - - - - - - - - - - - - - """
+# - - - Speaker objects - - - - - - - - - - - - - - - - -
 
     @endpoints.method(SpeakerForm, SpeakerForm, path='speaker',
                       http_method='POST', name='addSpeaker')
