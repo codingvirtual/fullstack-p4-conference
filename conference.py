@@ -69,7 +69,8 @@ ANNOUNCEMENT_TPL = ('Last chance to attend! The following conferences '
                scopes=[EMAIL_SCOPE])
 
 class ConferenceApi(remote.Service):
-    """Conference API v0.1"""
+    """ Conference API to facilitate creating and managing Conferences
+        and the Sessions and Speakers associated with them. """
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     @endpoints.method(SESSIONS_POST_REQUEST, SessionForm,
@@ -77,7 +78,10 @@ class ConferenceApi(remote.Service):
                       name='createSession',
                       http_method='POST')
     def createSession (self, request):
-        # Create new Session for conference
+        """ Create new Session for a specific Conference. Provide the
+            'websafe' ConferenceKey in the parameter. Returns the newly created
+            Session object
+        """
         return self._createSessionObject(request)
 
     def _createSessionObject (self, request):
@@ -155,8 +159,10 @@ class ConferenceApi(remote.Service):
                       path='getConferenceSessions/{conferenceKey}',
                       http_method='GET', name='getConferenceSessions')
     def getConferenceSessions (self, request):
-        """ Return list of sessions for a particular conference using the
-            web-safe conference key provided in the GET request """
+        """ Returns all Sessions associated with a particular Conference.
+            Provide the websafe ConferenceKey for the Conference to retrieve
+            sessions for as the parameter to the request.
+        """
         wsck = request.conferenceKey
         conf_key = ndb.Key(urlsafe=wsck)
         confSessions = Session.query(ancestor=conf_key)
@@ -169,8 +175,10 @@ class ConferenceApi(remote.Service):
                       path='session/{conferenceKey}/{typeOfSession}',
                       http_method='POST', name='getConferenceSessionsByType')
     def getConferenceSessionsByType (self, request):
-        """ return requested sessions for the conference
-            (by websafeConferenceKey and type of session)."""
+        """ Returns a list of Sessions for a given Conference.
+            Provide the conferenceKey parameter to specify which Conference
+            you want Sessions for, and specify the type of Session desired
+            ('Class', 'Workshop,' etc.) using the typeOfSession parameter."""
 
         """ first, build the key to the conference based  on the websafe key
             that was in the request """
@@ -220,7 +228,9 @@ class ConferenceApi(remote.Service):
                       path='session_by_speaker/{speaker}', http_method='POST',
                       name='getSessionsBySpeaker')
     def getSessionsBySpeaker (self, request):
-        # Return requested sessions (by speaker)
+        """ Returns all Sessions that a particular Speaker is speaking at.
+            Provide the websafe key for the Speaker in the request parameter.
+        """
         sessions = Session.query(Session.speakerKey == request.speakerKey)
 
         return SessionForms(
@@ -231,7 +241,9 @@ class ConferenceApi(remote.Service):
                       path='querySessions', http_method='POST',
                       name='querySessions')
     def querySessions (self, request):
-        # Query for sessions. This query can be used with various filters
+        """ Returns all Sessions that match the filters specified in the
+            SessionQueryForms POST body. See source code for details on
+            how to construct and use the filters. """
         sessions = self._sessionQueryFactory(request)
 
         return SessionForms(
@@ -242,8 +254,11 @@ class ConferenceApi(remote.Service):
                       path='wishlist', http_method='POST',
                       name='addSessionToWishlist')
     def addSessionToWishlist (self, request):
-        """ adds the session to the user's list of sessions
-            they are interested in attending """
+        """ Adds a particular Session of a Conference to the current user's
+            'wishlist' of Sessions (which is part of their Profile).
+            In the request body, provide the websafe Session Key for
+            the Session to attach to the Wishlist. A Session can only
+            be added once (no duplicates allowed). """
         return self._addSessionToWishlist(request)
 
     def _addSessionToWishlist (self, request):
@@ -283,7 +298,9 @@ class ConferenceApi(remote.Service):
                       path='wishlist',
                       http_method='DELETE', name='removeSessionFromWishlist')
     def removeSessionFromWishlist (self, request):
-        # remove user for selected session
+        """ Removes a specific Session from the current user's wishlist of
+        Sessions. Specify which session to remove by providing the websafe
+        Session Key in the request body. """
         return self._removeSessionFromWishlist(request)
 
     def _removeSessionFromWishlist (self, request):
@@ -318,9 +335,7 @@ class ConferenceApi(remote.Service):
     @endpoints.method(message_types.VoidMessage, SessionForms,
                       http_method='POST', name='getSessionsInWishlist')
     def getSessionsInWishlist (self, request):
-        """ Returns a user's wishlist of sessions
-            Check to see there is a logged-in user. Return an auth error if
-            not, otherwise get their profile from Datastore """
+        """ Returns a the current user's wishlist of sessions. """
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
@@ -369,11 +384,19 @@ class ConferenceApi(remote.Service):
         request AND occur BEFORE the time specified in the request.
     """
     @endpoints.method(QUERY_POST_REQUEST, SessionForms,
-                      path='sessionsByTimeAndType',
+                      path='sessionsByTypeLessThanTime',
                       http_method='POST',
-                      name='sessionsByTimeAndType')
-    def sessionsByTimeAndType (self, request):
-        """ startTime is stored as a string and is in 24-hour HH:MM:SS format
+                      name='sessionsByTypeLessThanTime')
+    def sessionsByTypeLessThanTime (self, request):
+        """ Returns all Sessions (spanning all Conferences) that are of a
+            specified type and that occur strictly before a specified time
+            (strictly meaning NOT "at or before," but just "before").
+            In the POST request body, the typeOfSession field should be
+            set to the type of session to search for (e.g. 'workshop,'
+            'lecture,' etc.) and the startTime field should contain a
+            properly formatted Time string ('HH:MM' in 24 hour format).
+        """
+        """ startTime is stored as a string and is in 24-hour HH:MM format
             so a less-than search will yield the correct results.
             For this to work, a query with a subsequent filter is needed.
             First, all sessions (regardless of which conference they are part
@@ -383,9 +406,8 @@ class ConferenceApi(remote.Service):
             before the time specified in the request (meaning NOT "at or
             before," but purely before. So if the request startTime is 19:00:00
             then a session starting at exactly that time will NOT be returned.
-        """
 
-        """ First build a query for all sessions that match the session type in
+            First build a query for all sessions that match the session type in
             the request and sort it by typeOfSession """
         matchingSessions = Session.query(
             Session.typeOfSession == request.typeOfSession).filter(
@@ -419,13 +441,23 @@ class ConferenceApi(remote.Service):
                       http_method='POST',
                       name='queryProblem')
     def queryProblem (self, request):
+        """ Returns all Sessions (across all Conferences) that do NOT match
+            the specified typeOfSession and that DO occur strictly before
+            (not "at or before") the specified startTime.\n
+
+            typeOfSession is a string that identifies the specific type
+            of session to EXCLUDE from the search (e.g. 'workshop,' or
+            'lecture').\n
+
+            startTime is a string in proper Time format (HH:MM) specified
+            using 24 hour time. """
+
         """ First, start by getting all of the sessions that do NOT match
             the type specified in the query. Then, iterate over the results
             and build a new list that contains only those sessions that start
             before the specified time.
-        """
 
-        """ First build a query for all sessions that do not match the session
+            First build a query for all sessions that do not match the session
             type in the request """
         sessionsByType = Session.query(
             Session.typeOfSession != request.typeOfSession)
@@ -459,8 +491,8 @@ class ConferenceApi(remote.Service):
         return self._createSpeakerObject(request)
 
     def _createSpeakerObject (self, request):
-        """ internal method to create a speaker object. There must be a
-            logged-in user for this to work. """
+        """ Creates a new Speaker in the system and returns the newly created
+            Speaker object as evidence of success. """
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
@@ -491,7 +523,6 @@ class ConferenceApi(remote.Service):
             with the relevant fields filled in. """
         sp = Speaker(**data)
 
-
         # Save the speaker to Datastore
         sp.put()
         return self._copySpeakerToForm(sp)
@@ -511,7 +542,21 @@ class ConferenceApi(remote.Service):
                       path='getFeaturedSpeaker/{conf_key}',
                       http_method='GET', name='getFeaturedSpeaker')
     def getFeaturedSpeaker (self, request):
-        # Returns the sessions of the featured speaker
+        """ Returns information about the Featured Speaker for a particular
+            Conference. In the request, specify the Conference for which
+            the Featured Speaker information is desired.\n
+
+            If a Featured Speaker is set for the specified Conference, this
+            will return a FeaturedSpeakerData object that contains a field
+            for the Speaker key (uniquely identifies the Speaker in the system)
+            and a list of Session Names that the Speaker is speaking at.\n
+
+            THe "Featured Speaker" is defined as the Speaker at a Conference
+            who is speaking at the most Sessions. If there are multiple
+            Speakers that are "tied" for the most Sessions, an arbitrary
+            Speaker is chosen from the Speakers in the tie.\n
+
+             See _setFeaturedSpeaker() in the source code for more details."""
         featuredSpeakerMessage = memcache.get(
             MEMCACHE_SPEAKER_KEY + request.conf_key)
         return FeaturedSpeakerData(
@@ -531,9 +576,7 @@ class ConferenceApi(remote.Service):
                       path='speakers',
                       http_method='GET', name='getAllSpeakers')
     def getAllSpeakers (self, request):
-        """ 2nd Query to satisfy Requirement 5.2: Come up with 2
-            additional queries. This query simply returns a list of
-            all speakers in the system. """
+        """ Returns a list of all the Speakers that are in the system. """
         speakers = Speaker.query()
         return SpeakerForms(items=[self._copySpeakerToForm(speaker)
                                    for speaker in speakers])
@@ -673,22 +716,25 @@ class ConferenceApi(remote.Service):
                       path='conference', http_method='POST',
                       name='createConference')
     def createConference (self, request):
-        # Create new conference
+        """ Create a new Conference in the system. """
         return self._createConferenceObject(request)
 
     @endpoints.method(CONF_POST_REQUEST, ConferenceForm,
                       path='conference/{websafeConferenceKey}',
                       http_method='PUT', name='updateConference')
     def updateConference (self, request):
-        # Update conference w/provided fields & return w/updated info
+        """ Updates an existing Conference (as identified by the
+            websafeConferenceKey parameter) with the data provided in the
+            request body. Returns the udpated Conference object. """
         return self._updateConferenceObject(request)
 
     @endpoints.method(CONF_GET_REQUEST, ConferenceForm,
                       path='conference/{websafeConferenceKey}',
                       http_method='GET', name='getConference')
     def getConference (self, request):
-        """ Return requested conference (by websafeConferenceKey).
-            Get Conference object from request; bail if not found """
+        """ Returns the Conference object identified by the
+            websafeConferenceKey parameter or an exception if the specified
+            Conference key does not exist. """
         conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
         if not conf:
             raise endpoints.NotFoundException(
@@ -703,8 +749,8 @@ class ConferenceApi(remote.Service):
                       path='getConferencesCreated',
                       http_method='POST', name='getConferencesCreated')
     def getConferencesCreated (self, request):
-        """ Return conferences created by user.
-            Make sure user is authorized """
+        """ Return a list of all Conferences that the current user has
+            created/organized. """
         user = endpoints.get_current_user()
         if not user:
             raise endpoints.UnauthorizedException('Authorization required')
@@ -779,7 +825,9 @@ class ConferenceApi(remote.Service):
                       path='queryConferences', http_method='POST',
                       name='queryConferences')
     def queryConferences (self, request):
-        # Query for conferences
+        """ Returns a list of Conferences that satisfy the query specifications
+            provided by the request body. See the source code for specifics
+            on how to specify the query terms. """
         conferences = self._getQuery(request)
 
         """ need to fetch organiser displayName from profiles.
@@ -867,13 +915,14 @@ class ConferenceApi(remote.Service):
     @endpoints.method(message_types.VoidMessage, ProfileForm,
                       path='profile', http_method='GET', name='getProfile')
     def getProfile (self, request):
-        # Return user profile
+        """ Returns the Profile of the current user. """
         return self._doProfile()
 
     @endpoints.method(ProfileMiniForm, ProfileForm,
                       path='profile', http_method='POST', name='saveProfile')
     def saveProfile (self, request):
-        # Update & return user profile
+        """ Updates the Profile of the current user with the data provided
+            in the request body. """
         return self._doProfile(request)
 
 # - - - Announcements - - - - - - - - - - - - - - - - - - - -
@@ -908,42 +957,112 @@ class ConferenceApi(remote.Service):
             For the purposes of this project, there will be only one Featured
             Speaker for each conference. The Featured Speaker will be the
             speaker who has the MOST speaking sessions at this conference.
+
+            This was a conscious design decision to define Featured Speaker
+            more "robustly" than the project requirements. I chose to do this
+            in order to learn how to create and return more sophisticated
+            Message objects (in this case, one that contained a string and
+            a list that had to be built up).
         """
+
+        # Create a key based on the c_key parameter passed in.
         c_key = ndb.Key(urlsafe=request.get('c_key'))
+
+        # Limit the projection to minimize data transfer - only need 2 fields.
         qo = ndb.QueryOptions(projection=['speakerKey', 'sessionName'])
+
+        # Construct the query - all Sessions for the specified Conference
         q = Session.query(ancestor=c_key)
+
+        # Perform the query
         results = q.fetch(options=qo)
+
+        # Set up a few variables to hold the processed results
+
+        """ speakerSummary will contain a list of Speaker keys. If a Speaker
+            is speaking at more than one Session, their key will appear
+            in the list once for every Session they are speaking at. This
+            fact will be used to count their "appearances" later. """
         speakerSummary = []
+
+        """ sessions will contain a list of tuples that each contain the key
+            for the Speakera and the name of the Session they are speaking
+            at. This list will be used later to extract the session names
+            for whichever Speaker is determined to be the Featured Speaker."""
         sessions = []
         featuredMessage = {}
+
+        # the 'key' element will hold the websafe key for the Speaker object
         featuredMessage['key'] = ""
+
+        """ The 'sessionName' list will contain a list of the Session names
+            that this Speaker is speaking at """
         featuredMessage['sessionName'] = []
 
+        """ To determine the Featured Speaker, an intermediate data object is
+            needed as there is no query-based way to do a summarized count
+            by Speaker. With traditional SQL, one could use a group-by
+            constraint combined with a count() method in the query to retrieve
+            these same results very easily. Datastore's "GQL" language does
+            not support this type of query, so it has to be derived
+            programatically. The overall approach is to retrieve all Sessions
+            for a particular Conference then iterate over the results and
+            build up an interim data structure that has a single "row" for
+            each Speaker that contains their websafe key and a count of how
+            many Sessions they are speaking at. From there, the Speaker
+            with the highest count can be easily extracted and the Memcache
+            entry defined accordingly. """
+
+        # Iterate over results and build a set of lists for later processing
         for row in results:
+            # Update the two lists if there is a Speaker associated
             if row.speakerKey is not None:
                 speakerSummary.append(row.speakerKey)
                 sessions.append(row)
 
+        """ The Counter class takes the speakerSummary list and creates a tuple
+            for each Speaker. The tuple consists of the Speaker's key as the
+              first element and the count of how many times that key appeared
+              in the speakerSummary list as the 2nd data element. """
         summary = Counter(speakerSummary)
 
+        """ this method is a utility method that returns the count which will
+            be the 2nd element of the tuple. The Counter class is responsible
+             for creating these tuples. """
         def get_count(tuple):
             return tuple[1]
 
-        sortedSummary = sorted(summary.items(), key = get_count, reverse=True)
+        """ This creates the summary list object by taking the summary object
+            that Counter created above and sorting it in reverse order (so
+            the Speaker with the MOST entries will be 1st in the list). A
+            key/value pair is created where the key is the count and the
+            value is the Speaker key associated with that count. """
+        sortedSummary = sorted(summary.items(), key=get_count, reverse=True)
 
+        """ Make sure there are ANY Speakers for the Conference. If so, grab
+            the first one and make them the Featured Speaker. """
         if sortedSummary:
             featuredSpeakerKey = sortedSummary[0][0]
         else:
             featuredSpeakerKey = None
 
+        """ If a Featured Speaker was found, build up a Memcache entry that
+            contains the Speaker's key and a list of Session names for the
+            Sessions they are speaking at. """
         if featuredSpeakerKey:
             featuredMessage['key'] = featuredSpeakerKey
             for session in sessions:
                 if session.speakerKey == featuredSpeakerKey:
                     featuredMessage['sessionName'].append(session.sessionName)
+
+            """ The Memcache key consists of the string constant and the
+                websafe key for the Conference this relates to. The value
+                of the entry is the featuredMessage object that is built up
+                in the code block directly above. """
             memcache.set(MEMCACHE_SPEAKER_KEY + c_key.urlsafe(),
                          featuredMessage)
 
+        # If there was no featured Speaker, clear out any Memcache entry.
         else:
             # No featured speakers in the system, so clear the MemCache
             memcache.delete(MEMCACHE_SPEAKER_KEY + c_key.urlsafe())
@@ -954,7 +1073,8 @@ class ConferenceApi(remote.Service):
         path='conference/announcement/get', http_method='GET',
         name='getAnnouncement')
     def getAnnouncement (self, request):
-            # Return Announcement from memcache.
+            """ Return any current Announcement from Memcache. If there is
+                no Announcement present, return an empty string. """
             return StringMessage(data=memcache.get(
                 MEMCACHE_ANNOUNCEMENTS_KEY) or "")
 
@@ -962,7 +1082,13 @@ class ConferenceApi(remote.Service):
 
     @ndb.transactional(xg=True)
     def _conferenceRegistration (self, request, reg=True):
-        # Register or unregister user for selected conference
+        """ Register or unregister user for selected Conference. Will throw
+            an exception if the specified Conference does not exist. Will
+            also throw an exception if the user is trying to register for a
+            Conferene they have already registered for or if the Conference
+            has no remaining seats available. Will also throw an exception if
+            trying to unregister from a Conference that the user is not
+            presently registered for. """
         retval = None
 
         # get the Profile from the logged-in user
@@ -1013,10 +1139,11 @@ class ConferenceApi(remote.Service):
                       path='conferences/attending',
                       http_method='GET', name='getConferencesToAttend')
     def getConferencesToAttend (self, request):
-        """ Get list of conferences that user has registered for.
-            First, get user's profile and then use that to build a query for
-            all descendent conferences (which represent the conferences the
-            user has registered for """
+        """ Return list of Conferences the current user is registered for. """
+
+        """ First, get user's profile and then use that to build a query for
+            all descendant conferences (which represent the conferences the
+            user has registered for) """
         prof = self._getProfileFromUser()
         conf_keys = [ndb.Key(urlsafe=wsck)
                      for wsck in prof.conferenceKeysToAttend]
@@ -1041,14 +1168,20 @@ class ConferenceApi(remote.Service):
                       path='conference/{websafeConferenceKey}',
                       http_method='POST', name='registerForConference')
     def registerForConference (self, request):
-        # Register user for selected conference
+        """ Register the current user for the Conference specified in the
+            websafeConferenceKey parameter assuming there are still seats
+            available for that Conference and the user isn't already registered
+            for that Conference (both will throw exceptions). """
         return self._conferenceRegistration(request)
 
     @endpoints.method(CONF_GET_REQUEST, BooleanMessage,
                       path='conference/{websafeConferenceKey}',
                       http_method='DELETE', name='unregisterFromConference')
     def unregisterFromConference (self, request):
-        # Unregister user for selected conference
+        """ Unregisters the current user from the Conference specified in the
+            websafeConferenceKey parameter assuming they are presently
+            registered for that Conference (throws exception if the user is
+            not presently registered for that Conference). """
         return self._conferenceRegistration(request, reg=False)
 
     @endpoints.method(message_types.VoidMessage, ConferenceForms,
