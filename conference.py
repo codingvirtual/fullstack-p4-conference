@@ -92,13 +92,13 @@ class ConferenceApi(remote.Service):
             raise endpoints.BadRequestException(
                 "Session name is required")
 
-        conf = Conference.query(urlsafe=request.conferenceKey).get()
+        conf = ndb.Key(urlsafe=request.conferenceKey)
 
         if not conf:
             raise endpoints.NotFoundException(
                 'No conference found with key: %s' % request.conferenceKey)
 
-        if conf.parent().urlsafe() != user.urlsafe():
+        if conf.parent() != ndb.Key(Profile, getUserId(user)):
             raise endpoints.ForbiddenException(
                 'You must be the conference organizer to be able to create'
                 'sessions for this conference.'
@@ -213,6 +213,8 @@ class ConferenceApi(remote.Service):
                 setattr(sf, field.name, sess.key.urlsafe())
         sf.check_initialized()
         return sf
+
+
 
     @endpoints.method(SESSION_BY_SPEAKER_POST_REQUEST, SessionForms,
                       path='session_by_speaker/{speaker}', http_method='POST',
@@ -482,11 +484,13 @@ class ConferenceApi(remote.Service):
 
         # now save the new key to the dictionary
         data['key'] = sp_key
+        del data['profileKey']
 
         """ create the Speaker object, passing in the dictionary to the
             constructor. The returned object will be the new Speaker object
             with the relevant fields filled in. """
         sp = Speaker(**data)
+
 
         # Save the speaker to Datastore
         sp.put()
@@ -503,13 +507,25 @@ class ConferenceApi(remote.Service):
         sf.check_initialized()
         return sf
 
-    @endpoints.method(GET_FEATURED_SPEAKER_REQUEST, StringMessage,
-                      path="'getFeaturedSpeaker/{conf_key}",
+    @endpoints.method(GET_FEATURED_SPEAKER_REQUEST, FeaturedSpeakerData,
+                      path='getFeaturedSpeaker/{conf_key}',
                       http_method='GET', name='getFeaturedSpeaker')
     def getFeaturedSpeaker (self, request):
         # Returns the sessions of the featured speaker
-        return StringMessage(data=memcache.get(
-            MEMCACHE_SPEAKER_KEY + request.conf_key) or "")
+        featuredSpeakerMessage = memcache.get(
+            MEMCACHE_SPEAKER_KEY + request.conf_key)
+        return FeaturedSpeakerData(
+            speakerKey=featuredSpeakerMessage['key'],
+            items=[self._copySpeakerSessionToForm(sess)
+                   for sess in featuredSpeakerMessage['sessionName']])
+
+
+    def _copySpeakerSessionToForm (self, sess):
+        sf = FeaturedSpeakerSession()
+        # Copy relevant fields from Speaker to SpeakerForm
+        sf.sessionName = sess
+        sf.check_initialized()
+        return sf
 
     @endpoints.method(message_types.VoidMessage, SpeakerForms,
                       path='speakers',
@@ -899,9 +915,9 @@ class ConferenceApi(remote.Service):
         results = q.fetch(options=qo)
         speakerSummary = []
         sessions = []
-        featuredMessage = None
+        featuredMessage = {}
         featuredMessage['key'] = ""
-        featuredMessage['sessions'] = []
+        featuredMessage['sessionName'] = []
 
         for row in results:
             if row.speakerKey is not None:
@@ -924,7 +940,7 @@ class ConferenceApi(remote.Service):
             featuredMessage['key'] = featuredSpeakerKey
             for session in sessions:
                 if session.speakerKey == featuredSpeakerKey:
-                    featuredMessage['sessions'].append(session.sessionName)
+                    featuredMessage['sessionName'].append(session.sessionName)
             memcache.set(MEMCACHE_SPEAKER_KEY + c_key.urlsafe(),
                          featuredMessage)
 
@@ -935,7 +951,7 @@ class ConferenceApi(remote.Service):
 
     @endpoints.method(
         message_types.VoidMessage, StringMessage,
-        path='conference/announcement/get',http_method='GET',
+        path='conference/announcement/get', http_method='GET',
         name='getAnnouncement')
     def getAnnouncement (self, request):
             # Return Announcement from memcache.

@@ -111,6 +111,16 @@ class SpeakerForms(messages.Message):
     """SpeakerForm -- multiple Speaker outbound form message"""
     items = messages.MessageField(SpeakerForm, 1, repeated=True)
 
+
+class FeaturedSpeakerSession(messages.Message):
+    sessionName = messages.StringField(1)
+
+
+class FeaturedSpeakerData(messages.Message):
+    """ Memcache-retrieved FeaturedSpeaker Object """
+    speakerKey = messages.StringField(1)
+    items = messages.MessageField(FeaturedSpeakerSession, 2, repeated=True)
+
 class ConflictException(endpoints.ServiceException):
     """ConflictException -- exception mapped to HTTP 409 response"""
     http_status = httplib.CONFLICT
